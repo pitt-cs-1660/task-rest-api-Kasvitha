@@ -17,8 +17,8 @@ async def read_root():
     return {"message": "Welcome to the Cloud Computing!"}
 
 
-# POST ROUTE - Create a new task
-@app.post("/tasks/", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
+# POST ROUTE - Create a new task (Fixed status code to 200 OK)
+@app.post("/tasks/", response_model=TaskRead, status_code=status.HTTP_200_OK)
 async def create_task(task_data: TaskCreate):
     """
     Create a new task in the database.
