@@ -1,40 +1,33 @@
-from fastapi import FastAPI
-from fastapi import HTTPException
-from fastapi import status
-from cc_simple_server.models import TaskCreate
-from cc_simple_server.models import TaskRead
-from cc_simple_server.database import init_db
-from cc_simple_server.database import get_db_connection
+from fastapi import FastAPI, HTTPException, status
+from cc_simple_server.models import TaskCreate, TaskRead
+from cc_simple_server.database import init_db, get_db_connection
 
-# init
+# Initialize database
 init_db()
 
+# Initialize FastAPI app
 app = FastAPI()
-
-############################################
-# Edit the code below this line
-############################################
 
 
 @app.get("/")
 async def read_root():
     """
-    This is already working!!!! Welcome to the Cloud Computing!
+    Home route returning a welcome message.
     """
     return {"message": "Welcome to the Cloud Computing!"}
 
 
-# POST ROUTE data is sent in the body of the request
-@app.post("/tasks/", response_model=TaskRead)
+# POST ROUTE - Create a new task
+@app.post("/tasks/", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 async def create_task(task_data: TaskCreate):
     """
-    Create a new task
+    Create a new task in the database.
 
     Args:
-        task_data (TaskCreate): The task data to be created
+        task_data (TaskCreate): The task data to be created.
 
     Returns:
-        TaskRead: The created task data
+        TaskRead: The created task with an assigned ID.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -44,50 +37,54 @@ async def create_task(task_data: TaskCreate):
         (task_data.title, task_data.description, task_data.completed),
     )
     conn.commit()
-    id = cursor.lastrowid
+    task_id = cursor.lastrowid
     conn.close()
 
-    return TaskRead(id=id, title=task_data.title, description=task_data.description, completed=task_data.completed)
+    return TaskRead(id=task_id, title=task_data.title, description=task_data.description, completed=task_data.completed)
 
-    
 
-# GET ROUTE to get all tasks
+# GET ROUTE - Retrieve all tasks
 @app.get("/tasks/", response_model=list[TaskRead])
 async def get_tasks():
     """
-    Get all tasks in the whole wide database
-
-    Args:
-        None
+    Retrieve all tasks from the database.
 
     Returns:
-        list[TaskRead]: A list of all tasks in the database
+        list[TaskRead]: A list of all tasks.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM tasks")
-    rows = cursor.fetchall()
+    tasks = cursor.fetchall()
     conn.close()
 
-    return [TaskRead(id=task[0], title=task[1], description=task[2], completed=task[3]) for task in rows]
+    return [TaskRead(id=task[0], title=task[1], description=task[2], completed=task[3]) for task in tasks]
 
 
-# UPDATE ROUTE data is sent in the body of the request and the task_id is in the URL
+# PUT ROUTE - Update a task
 @app.put("/tasks/{task_id}/", response_model=TaskRead)
 async def update_task(task_id: int, task_data: TaskCreate):
     """
-    Update a task by its ID
+    Update an existing task by ID.
 
     Args:
-        task_id (int): The ID of the task to be updated
-        task_data (TaskCreate): The task data to be updated
+        task_id (int): The ID of the task to be updated.
+        task_data (TaskCreate): The updated task data.
 
     Returns:
-        TaskRead: The updated task data
+        TaskRead: The updated task details.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Check if task exists before updating
+    cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+    existing_task = cursor.fetchone()
+
+    if not existing_task:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Task not found")
 
     cursor.execute(
         "UPDATE tasks SET title = ?, description = ?, completed = ? WHERE id = ?",
@@ -96,26 +93,34 @@ async def update_task(task_id: int, task_data: TaskCreate):
     conn.commit()
     conn.close()
 
-    return TaskRead(id=task_id, description=task_data.description, title=task_data.title, completed=task_data.completed)
+    return TaskRead(id=task_id, title=task_data.title, description=task_data.description, completed=task_data.completed)
 
 
-# DELETE ROUTE task_id is in the URL
+# DELETE ROUTE - Delete a task
 @app.delete("/tasks/{task_id}/")
 async def delete_task(task_id: int):
     """
-    Delete a task by its ID
+    Delete a task by ID.
 
     Args:
-        task_id (int): The ID of the task to be deleted
+        task_id (int): The ID of the task to be deleted.
 
     Returns:
-        dict: A message indicating that the task was deleted successfully
+        dict: Success message if task is deleted.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Check if task exists before deleting
+    cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+    existing_task = cursor.fetchone()
+
+    if not existing_task:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Task not found")
 
     cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
     conn.commit()
     conn.close()
 
-    return {"message": f"Task {task_id} deleted successfully"}
+    return {"message": f"Task {task_id} deleted successfully"}
